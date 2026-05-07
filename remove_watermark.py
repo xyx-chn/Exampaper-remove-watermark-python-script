@@ -4,7 +4,9 @@ import re
 
 def remove_watermark_pro(input_pdf_path, output_pdf_path):
     """
-    终极版：精准剥离倾斜文本水印，支持自动识别所有学号，绝对不伤及底图和正常内容
+    终极外科手术版：
+    通过直接修改 PDF 底层内容流（Content Stream）精准替换水印字符指令。
+    彻底解决水印与正常文字/图表重叠时被误删的问题，100% 保护底层内容。
     """
     try:
         if "（去水印版）" in input_pdf_path:
@@ -13,32 +15,23 @@ def remove_watermark_pro(input_pdf_path, output_pdf_path):
         doc = fitz.open(input_pdf_path)
         modified = False
 
-        # 1. 定义固定的普通水印关键词
         static_keywords = [
             "Use Responsibly & Respect Copyright"
         ]
         
-        # 2. 定义匹配学号水印的正则表达式（\d+ 代表匹配一个或多个数字）
-        dynamic_pattern = re.compile(r"XJTLU Academic Use Only by \d+")
+        # 针对底层字节流的正则表达式（PDF底层字符串通常包裹在圆括号中）
+        # 匹配形如: (XJTLU Academic Use Only by 1234567)
+        dynamic_pattern_byte = re.compile(rb"\((XJTLU Academic Use Only by \d+)\)")
 
         for page in doc:
-            # 动态提取当前页的文本，查找实际存在的学号水印内容
-            page_text = page.get_text("text")
-            # 找到当前页符合该格式的具体字符串（例如找到了 "...by 9876543"）
-            dynamic_matches = list(set(dynamic_pattern.findall(page_text)))
-            
-            # 将固定关键词和当前页提取到的动态水印合并，作为要清理的目标列表
-            current_page_keywords = static_keywords + dynamic_matches
-
-            # --- 策略一：针对“独立文本框/注释层” ---
+            # --- 策略一：清理独立的文本框/注释层 ---
             annot = page.first_annot
             while annot:
                 next_annot = annot.next
                 annot_text = str(annot.info.get("content", "")) + str(annot.info.get("subject", ""))
                 
-                # 判断：如果包含固定关键词前缀，或者匹配了学号正则表达式
                 is_match = any(kw[:10] in annot_text for kw in static_keywords)
-                if not is_match and dynamic_pattern.search(annot_text):
+                if not is_match and re.search(r"XJTLU Academic Use Only by \d+", annot_text):
                     is_match = True
                     
                 if is_match:
@@ -46,25 +39,43 @@ def remove_watermark_pro(input_pdf_path, output_pdf_path):
                     modified = True
                 annot = next_annot
 
-            # --- 策略二：针对“写死在页面里的倾斜文字” ---
-            for keyword in current_page_keywords:
-                # 关键修复 1：继续使用 quads=True 获取紧紧贴合倾斜文字的细长四边形
-                text_quads = page.search_for(keyword, quads=True)
+            # --- 策略二：外科手术级清理（PDF内容流底层替换） ---
+            # 1. 整合并清理页面的内容流（将可能零碎的流合并，方便正则匹配）
+            page.clean_contents() 
+            
+            # 2. 获取该页面的底层代码流
+            xrefs = page.get_contents()
+            if not xrefs:
+                continue
+            
+            for xref in xrefs:
+                # 读取字节流代码
+                stream = doc.xref_stream(xref)
+                if not stream:
+                    continue
+                    
+                original_stream = stream
                 
-                if text_quads:
+                # 替换固定关键词
+                for kw in static_keywords:
+                    # 将需要匹配的纯文本转换为底层字节形式，比如 (Use Responsibly & Respect Copyright)
+                    target = f"({kw})".encode('utf-8')
+                    # 替换为空字符串的绘制指令 ()
+                    stream = stream.replace(target, b"()")
+                
+                # 替换动态学号水印
+                # 使用 \1 占位符的做法不需要，直接替换成空括号即可
+                stream = dynamic_pattern_byte.sub(b"()", stream)
+                
+                # 如果底层代码发生了改变，将修改后的流写回 PDF
+                if stream != original_stream:
+                    doc.update_stream(xref, stream)
                     modified = True
-                    for quad in text_quads:
-                        # cross_out=False 防止画红叉，fill=None 保持透明
-                        page.add_redact_annot(quad, cross_out=False)
-        
-            # 关键修复 2：应用注销时，保护图片和底层矢量图！
-            if modified:
-                page.apply_redactions(images=0)
 
         if modified:
-            # 保存新文件
+            # garbage=4 和 deflate=True 会深度清理无用的元数据并极致压缩文件
             doc.save(output_pdf_path, garbage=4, deflate=True)
-            print(f"✅ 成功去除水印: {os.path.basename(input_pdf_path)}")
+            print(f"✅ 成功完美去除水印并保护底图: {os.path.basename(input_pdf_path)}")
             doc.close()
             return True
         else:
@@ -79,11 +90,10 @@ def remove_watermark_pro(input_pdf_path, output_pdf_path):
 
 def batch_process():
     root_dir = os.getcwd()
-    print(f"正在扫描目录: {root_dir} \n启动高级引擎，已支持自动适配全网学号，保护图片和底层布局...")
+    print(f"正在扫描目录: {root_dir} \n启动内容流手术级引擎，全力保护底图与重叠文字...")
 
     processed_count = 0
 
-    # 遍历当前目录及一级子目录
     for root, dirs, files in os.walk(root_dir):
         depth = root[len(root_dir):].count(os.sep)
         if depth > 1:
@@ -92,12 +102,10 @@ def batch_process():
         for file in files:
             if file.lower().endswith(".pdf"):
                 file_path = os.path.join(root, file)
-                
                 base_name, ext = os.path.splitext(file)
                 output_filename = f"{base_name}（去水印版）{ext}"
                 output_path = os.path.join(root, output_filename)
                 
-                # 函数签名已更新，不再需要传入写死的 keywords
                 if remove_watermark_pro(file_path, output_path):
                     processed_count += 1
 
