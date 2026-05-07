@@ -1,6 +1,6 @@
 # XJTLU-remove-watermark-python-script
 
-这是一个基于 Python 和 PyMuPDF 构建的自动化脚本，专为精准、无损地去除西交利物浦大学（XJTLU）PDF 课件中的学术水印而设计。
+这是一个基于 Python 和 PyMuPDF 构建的自动化脚本，专为精准、无损地去除西交利物浦大学（XJTLU）PDF 课件中的学术水印而设计。打包好的即点即用exe在release里。
 
 本版本为**动态正则升级版**，无需手动输入学号，即可自动识别并剥离全网学号的倾斜水印，同时完美保护文档的原始排版、图片和底层矢量图。
 
