@@ -49,4 +49,4 @@ python remove_watermark.py
 
 ## 📝 许可证 (License)
 
-没想好，反正gemini写的
+Open source — GNU AGPL v3. Free for open-source projects.
