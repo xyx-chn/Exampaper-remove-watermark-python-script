@@ -50,3 +50,6 @@ python remove_watermark.py
 ## 📝 许可证 (License)
 
 Open source — GNU AGPL v3. Free for open-source projects.
+
+## Friendly recommend
+Recommend to use together: https://github.com/MalachiteN/pdf-js-extractor/tree/main
